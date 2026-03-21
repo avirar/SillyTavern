@@ -1,0 +1,118 @@
+<div id="comfyui-video-settings" class="inline-drawer">
+    <div class="inline-drawer-toggle inline-drawer-header">
+        <b>ComfyUI Video Generation (Wan 2.2 I2V)</b>
+        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+    </div>
+    <div class="inline-drawer-content">
+            <div>
+                <label for="cv_comfy_url">ComfyUI URL</label>
+                <input id="cv_comfy_url" type="text" class="text_pole" placeholder="Auto-uses SD extension URL" />
+                <small>Leave empty to auto-use the ComfyUI URL from the SD extension settings.</small>
+            </div>
+            <div>
+                <label for="cv_unet_high">UNET High Noise Model</label>
+                <select id="cv_unet_high">
+                    <option value="">Auto-detect</option>
+                </select>
+            </div>
+            <div>
+                <label for="cv_unet_low">UNET Low Noise Model</label>
+                <select id="cv_unet_low">
+                    <option value="">Auto-detect</option>
+                </select>
+            </div>
+            <div>
+                <label for="cv_text_encoder">Text Encoder</label>
+                <select id="cv_text_encoder">
+                    <option value="">Auto (UMT5 preferred)</option>
+                </select>
+            </div>
+            <div>
+                <label for="cv_vae">VAE</label>
+                <select id="cv_vae">
+                    <option value="">Default</option>
+                </select>
+            </div>
+            <div>
+                <label for="cv_lora">LoRA</label>
+                <select id="cv_lora">
+                    <option value="">None</option>
+                </select>
+            </div>
+            <div>
+                <label for="cv_lora_weight">LoRA Weight</label>
+                <input id="cv_lora_weight" type="number" class="text_pole" value="1.0" min="-2" max="5" step="0.1" />
+            </div>
+            <div>
+                <label for="cv_resolution">Resolution</label>
+                <select id="cv_resolution">
+                    <option value="512,512">512×512</option>
+                    <option value="768,768">768×768</option>
+                    <option value="832,480">832×480</option>
+                </select>
+            </div>
+            <div>
+                <label for="cv_fps">FPS</label>
+                <select id="cv_fps">
+                    <option value="16">16</option>
+                    <option value="24" selected>24</option>
+                    <option value="30">30</option>
+                </select>
+            </div>
+            <div>
+                <label for="cv_duration">Duration (seconds)</label>
+                <input id="cv_duration" type="number" class="text_pole" value="5" min="1" max="10" step="1" />
+            </div>
+            <div>
+                <label for="cv_seed">Seed</label>
+                <div class="flex-container flexnowrap">
+                    <input id="cv_seed" type="number" class="text_pole" value="-1" min="-1" step="1" />
+                    <div id="cv_randomize_seed" class="menu_button menu_button_icon" title="Randomize seed">
+                        <i class="fa-solid fa-dice"></i>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label for="cv_steps">Sampling Steps</label>
+                <input id="cv_steps" type="number" class="text_pole" value="10" min="1" max="100" step="1" />
+            </div>
+            <div>
+                <label for="cv_guidance">Guidance Scale (CFG)</label>
+                <input id="cv_guidance" type="number" class="text_pole" value="6.0" min="0.0" max="20" step="0.1" />
+            </div>
+            <div>
+                <label for="cv_shift">Shift (noise schedule)</label>
+                <input id="cv_shift" type="number" class="text_pole" value="8.0" min="0.0" max="20" step="0.5" />
+            </div>
+            <div>
+                <label for="cv_split_point">High-Noise Ratio</label>
+                <input id="cv_split_point" type="range" class="text_pole" value="50" min="20" max="80" step="5" />
+                <small id="cv_split_display">50% (5 high / 5 low on 10 steps)</small>
+            </div>
+            <div>
+                <label for="cv_prompt">Prompt Override</label>
+                <input id="cv_prompt" type="text" class="text_pole" placeholder="Optional. Leave empty to auto-caption image." />
+            </div>
+            <div>
+                <label for="cv_negative_prompt">Negative Prompt</label>
+                <input id="cv_negative_prompt" type="text" class="text_pole" value="blurry, distorted, low quality, artifacts, watermark, static" />
+            </div>
+            <div>
+                <label for="cv_use_end_frame">
+                    <input id="cv_use_end_frame" type="checkbox" />
+                    Use End Frame (FLF2V)
+                </label>
+            </div>
+            <div>
+                <label for="cv_use_sageattn">
+                    <input id="cv_use_sageattn" type="checkbox" checked />
+                    Use SageAttention (faster on RTX 3090)
+                </label>
+            </div>
+            <div>
+                <button id="cv_refresh_models" class="menu_button">
+                    <i class="fa-solid fa-refresh"></i> Refresh Model List
+                </button>
+            </div>
+        </div>
+</div>
