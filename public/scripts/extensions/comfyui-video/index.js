@@ -71,16 +71,35 @@ function buildWan22I2VWorkflow(imageFilename, prompt, negativePrompt, settings) 
     const height = settings.height ?? 768;
     const steps = settings.steps ?? 10;
     const useSageAttn = settings.useSageAttn ?? true;
+    const sageAttnMode = settings.sageAttnMode ?? 'auto';
     const splitRatio = (settings.splitPoint ?? 50) / 100;
     const splitStep = Math.max(1, Math.round(steps * splitRatio));
 
-    const posPrompt = prompt?.trim() || 'high quality, smooth motion, cinematic';
+    // Sampler and scheduler settings
+    const samplerHigh = settings.samplerHigh ?? 'euler_ancestral';
+    const samplerLow = settings.samplerLow ?? 'euler_ancestral';
+    const scheduler = settings.scheduler ?? 'normal';
+
+    // Stepped CFG and LoRA settings
+    const cfgHigh = settings.cfgHigh ?? 2.0;
+    const cfgLow = settings.cfgLow ?? 1.0;
+    const useLora = settings.useLora ?? true;
+
+    // Add trigger word to prompt if LoRA enabled
+    const triggerWord = useLora ? "nsfwsk " : "";
+    const posPrompt = triggerWord + (prompt?.trim() || 'high quality, smooth motion, cinematic');
     const negPrompt = negativePrompt?.trim() || 'blurry, distorted, low quality, artifacts';
 
     const unetHigh = 'wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors';
     const unetLow = 'wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors';
     const textEncoder = 'umt5_xxl_fp8_e4m3fn_scaled.safetensors';
     const vae = 'Wan2_1_VAE_bf16.safetensors';
+
+    // LoRA settings - only add LoRA nodes if enabled
+    const loraNameHigh = 'NSFW-22-H-e8.safetensors';
+    const loraNameLow = 'NSFW-22-L-e8.safetensors';
+    const loraStrengthHigh = 0.9;
+    const loraStrengthLow = 0.9;
 
     const nodes = {};
 
@@ -112,26 +131,47 @@ function buildWan22I2VWorkflow(imageFilename, prompt, negativePrompt, settings) 
     nodes["7"] = { "class_type": "UNETLoader", "inputs": { "unet_name": unetHigh, "weight_dtype": "default" } };
     nodes["8"] = { "class_type": "UNETLoader", "inputs": { "unet_name": unetLow, "weight_dtype": "default" } };
 
+    // LoRA nodes - inserted between UNETLoader and attention/sampling
+    // Using LoraLoaderModelOnly (standard ComfyUI node) - only modifies MODEL, not CLIP
+    if (useLora) {
+        nodes["17"] = {
+            "class_type": "LoraLoaderModelOnly",
+            "inputs": {
+                "model": ["7", 0],
+                "lora_name": loraNameHigh,
+                "strength_model": loraStrengthHigh
+            }
+        };
+        nodes["18"] = {
+            "class_type": "LoraLoaderModelOnly",
+            "inputs": {
+                "model": ["8", 0],
+                "lora_name": loraNameLow,
+                "strength_model": loraStrengthLow
+            }
+        };
+    }
+
     if (useSageAttn) {
         nodes["9"] = {
             "class_type": "PathchSageAttentionKJ",
             "inputs": {
-                "model": ["7", 0],
-                "sage_attention": "sageattn_qk_int8_pv_fp16_cuda",
+                "model": useLora ? ["17", 0] : ["7", 0],
+                "sage_attention": sageAttnMode,
             }
         };
         nodes["10"] = {
             "class_type": "PathchSageAttentionKJ",
             "inputs": {
-                "model": ["8", 0],
-                "sage_attention": "sageattn_qk_int8_pv_fp16_cuda",
+                "model": useLora ? ["18", 0] : ["8", 0],
+                "sage_attention": sageAttnMode,
             }
         };
         nodes["11"] = { "class_type": "ModelSamplingSD3", "inputs": { "model": ["9", 0], "shift": shift } };
         nodes["12"] = { "class_type": "ModelSamplingSD3", "inputs": { "model": ["10", 0], "shift": shift } };
     } else {
-        nodes["9"] = { "class_type": "ModelSamplingSD3", "inputs": { "model": ["7", 0], "shift": shift } };
-        nodes["10"] = { "class_type": "ModelSamplingSD3", "inputs": { "model": ["8", 0], "shift": shift } };
+        nodes["9"] = { "class_type": "ModelSamplingSD3", "inputs": { "model": useLora ? ["17", 0] : ["7", 0], "shift": shift } };
+        nodes["10"] = { "class_type": "ModelSamplingSD3", "inputs": { "model": useLora ? ["18", 0] : ["8", 0], "shift": shift } };
     }
 
     nodes["13"] = {
@@ -141,9 +181,9 @@ function buildWan22I2VWorkflow(imageFilename, prompt, negativePrompt, settings) 
             "add_noise": "enable",
             "noise_seed": seed,
             "steps": steps,
-            "cfg": guidance,
-            "sampler_name": "euler",
-            "scheduler": "simple",
+            "cfg": cfgHigh,
+            "sampler_name": samplerHigh,
+            "scheduler": scheduler,
             "positive": ["6", 0],
             "negative": ["6", 1],
             "latent_image": ["6", 2],
@@ -159,9 +199,9 @@ function buildWan22I2VWorkflow(imageFilename, prompt, negativePrompt, settings) 
             "add_noise": "disable",
             "noise_seed": seed,
             "steps": steps,
-            "cfg": guidance,
-            "sampler_name": "euler",
-            "scheduler": "simple",
+            "cfg": cfgLow,
+            "sampler_name": samplerLow,
+            "scheduler": scheduler,
             "positive": ["6", 0],
             "negative": ["6", 1],
             "latent_image": ["13", 0],
@@ -223,8 +263,29 @@ function migrateSettings() {
     if (s.useSageAttn === undefined) {
         s.useSageAttn = true;
     }
+    if (s.sageAttnMode === undefined) {
+        s.sageAttnMode = 'auto';
+    }
     if (s.seed === undefined) {
         s.seed = -1;
+    }
+    if (s.samplerHigh === undefined) {
+        s.samplerHigh = 'euler_ancestral';
+    }
+    if (s.samplerLow === undefined) {
+        s.samplerLow = 'euler_ancestral';
+    }
+    if (s.scheduler === undefined) {
+        s.scheduler = 'normal';
+    }
+    if (s.cfgHigh === undefined) {
+        s.cfgHigh = 2.0;
+    }
+    if (s.cfgLow === undefined) {
+        s.cfgLow = 1.0;
+    }
+    if (s.useLora === undefined) {
+        s.useLora = true;
     }
 }
 
@@ -376,6 +437,11 @@ jQuery(async function () {
                 saveSettingsDebounced();
             });
 
+            $('#cv_sage_attn_mode').val(settings.sageAttnMode || 'auto').on('change', function() {
+                settings.sageAttnMode = $(this).val();
+                saveSettingsDebounced();
+            });
+
             $('#cv_resolution').val(settings.resolution || '768,768').on('change', function() {
                 const [w, h] = $(this).val().split(',').map(Number);
                 settings.resolution = $(this).val();
@@ -389,7 +455,7 @@ jQuery(async function () {
                 saveSettingsDebounced();
             });
 
-            $('#cv_split_point').on('input', function() {
+            $('#cv_split_point').val(settings.splitPoint ?? 50).on('input', function() {
                 const pct = Number($(this).val());
                 settings.splitPoint = pct;
                 const steps = settings.steps ?? 10;
@@ -408,8 +474,39 @@ jQuery(async function () {
                 saveSettingsDebounced();
             });
 
+            $('#cv_cfg_high').val(settings.cfgHigh ?? 2.0).on('input', function() {
+                settings.cfgHigh = Number($(this).val());
+                saveSettingsDebounced();
+            });
+
+            $('#cv_cfg_low').val(settings.cfgLow ?? 1.0).on('input', function() {
+                settings.cfgLow = Number($(this).val());
+                saveSettingsDebounced();
+            });
+
+            $('#cv_use_lora').prop('checked', settings.useLora !== false).on('change', function() {
+                settings.useLora = $(this).is(':checked');
+                saveSettingsDebounced();
+            });
+
             $('#cv_fps').val(settings.fps ?? 24).on('change', function() {
                 settings.fps = Number($(this).val());
+                saveSettingsDebounced();
+            });
+
+            // Sampler and scheduler settings
+            $('#cv_sampler_high').val(settings.samplerHigh || 'euler_ancestral').on('change', function() {
+                settings.samplerHigh = $(this).val();
+                saveSettingsDebounced();
+            });
+
+            $('#cv_sampler_low').val(settings.samplerLow || 'euler_ancestral').on('change', function() {
+                settings.samplerLow = $(this).val();
+                saveSettingsDebounced();
+            });
+
+            $('#cv_scheduler').val(settings.scheduler || 'normal').on('change', function() {
+                settings.scheduler = $(this).val();
                 saveSettingsDebounced();
             });
         }
