@@ -1,85 +1,145 @@
 <div id="comfyui-video-settings" class="inline-drawer">
     <div class="inline-drawer-toggle inline-drawer-header">
-        <b>ComfyUI Video Generation (Wan 2.2 I2V)</b>
+        <b>Wan 2.2 Video Generation (I2V)</b>
         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
     </div>
     <div class="inline-drawer-content">
-            <div>
-                <label for="cv_comfy_url">ComfyUI URL</label>
-                <input id="cv_comfy_url" type="text" class="text_pole" placeholder="Auto-uses SD extension URL" />
-                <small>Leave empty to auto-use the ComfyUI URL from the SD extension settings.</small>
+        <div>
+            <label for="cv_comfy_url">ComfyUI URL</label>
+            <input id="cv_comfy_url" type="text" class="text_pole" placeholder="Auto-uses SD extension URL" />
+            <small>Leave empty to auto-use the ComfyUI URL from the SD extension settings.</small>
+        </div>
+
+        <h4>Workflow</h4>
+        <div class="flex-container flexnowrap">
+            <select id="cv_workflow" class="flex1 text_pole"></select>
+            <div id="cv_open_workflow_editor" class="menu_button menu_button_icon" title="Open workflow editor">
+                <i class="fa-solid fa-pen-to-square"></i>
             </div>
-            <div>
-                <label for="cv_unet_high">UNET High Noise Model</label>
+            <div id="cv_new_workflow" class="menu_button menu_button_icon" title="Create new workflow">
+                <i class="fa-solid fa-plus"></i>
+            </div>
+            <div id="cv_rename_workflow" class="menu_button menu_button_icon" title="Rename workflow">
+                <i class="fa-solid fa-pencil"></i>
+            </div>
+            <div id="cv_delete_workflow" class="menu_button menu_button_icon" title="Delete workflow">
+                <i class="fa-solid fa-trash-can"></i>
+            </div>
+        </div>
+
+        <h4>Models</h4>
+        <div class="flex-container">
+            <div class="flex1">
+                <label for="cv_unet_high">UNET High Noise</label>
                 <select id="cv_unet_high">
                     <option value="">Auto-detect</option>
                 </select>
             </div>
-            <div>
-                <label for="cv_unet_low">UNET Low Noise Model</label>
+            <div class="flex1">
+                <label for="cv_unet_low">UNET Low Noise</label>
                 <select id="cv_unet_low">
                     <option value="">Auto-detect</option>
                 </select>
             </div>
-            <div>
+        </div>
+        <div class="flex-container">
+            <div class="flex1">
                 <label for="cv_text_encoder">Text Encoder</label>
                 <select id="cv_text_encoder">
                     <option value="">Auto (UMT5 preferred)</option>
                 </select>
             </div>
-            <div>
+            <div class="flex1">
                 <label for="cv_vae">VAE</label>
                 <select id="cv_vae">
                     <option value="">Default</option>
                 </select>
             </div>
-            <div>
-                <label for="cv_lora">LoRA</label>
-                <select id="cv_lora">
+        </div>
+
+        <h4>LoRA</h4>
+        <div class="flex-container marginTopBot5">
+            <label class="flex1 checkbox_label">
+                <input id="cv_use_lora" type="checkbox" />
+                <small>Enable LoRA</small>
+            </label>
+        </div>
+        <div class="flex-container">
+            <div class="flex1">
+                <label for="cv_lora_high">High-Noise LoRA</label>
+                <select id="cv_lora_high">
                     <option value="">None</option>
                 </select>
             </div>
-            <div>
-                <label for="cv_lora_weight">LoRA Weight</label>
-                <input id="cv_lora_weight" type="number" class="text_pole" value="1.0" min="-2" max="5" step="0.1" />
+            <div class="flex1">
+                <label for="cv_lora_low">Low-Noise LoRA</label>
+                <select id="cv_lora_low">
+                    <option value="">None</option>
+                </select>
             </div>
-            <div>
+        </div>
+        <div class="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
+            <small>LoRA Strength</small>
+            <input class="neo-range-slider" type="range" id="cv_lora_weight" min="-2" max="5" step="0.1" value="0.9">
+            <input class="neo-range-input" type="number" id="cv_lora_weight_value" data-for="cv_lora_weight" min="-2" max="5" step="0.1" value="0.9">
+        </div>
+
+        <h4>Video Output</h4>
+        <div class="flex-container marginTopBot5">
+            <label class="flex1 checkbox_label">
+                <input id="cv_send_image" type="checkbox" checked />
+                <small>Send attached image as first frame (I2V). Uncheck for text-to-video (MiniMax H3).</small>
+            </label>
+        </div>
+        <div class="flex-container">
+            <div class="flex1">
                 <label for="cv_resolution">Resolution</label>
                 <select id="cv_resolution">
                     <option value="512,512">512×512</option>
                     <option value="768,768">768×768</option>
                     <option value="832,480">832×480</option>
+                    <option value="1280,720">1280×720</option>
                 </select>
             </div>
-            <div>
+            <div class="flex1">
                 <label for="cv_fps">FPS</label>
                 <select id="cv_fps">
-                    <option value="16">16</option>
-                    <option value="24" selected>24</option>
+                    <option value="16" selected>16</option>
+                    <option value="24">24</option>
                     <option value="30">30</option>
                 </select>
             </div>
-            <div>
-                <label for="cv_duration">Duration (seconds)</label>
-                <input id="cv_duration" type="number" class="text_pole" value="5" min="1" max="10" step="1" />
+            <div class="flex1">
+                <label for="cv_duration">Duration (sec)</label>
+                <select id="cv_duration">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                </select>
             </div>
-            <div>
-                <label for="cv_seed">Seed</label>
-                <div class="flex-container flexnowrap">
-                    <input id="cv_seed" type="number" class="text_pole" value="-1" min="-1" step="1" />
-                    <div id="cv_randomize_seed" class="menu_button menu_button_icon" title="Randomize seed">
-                        <i class="fa-solid fa-dice"></i>
-                    </div>
-                </div>
+        </div>
+
+        <h4>Sampling</h4>
+        <div class="flex-container">
+            <div class="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
+                <small>Steps</small>
+                <input class="neo-range-slider" type="range" id="cv_steps" min="1" max="100" step="1" value="10">
+                <input class="neo-range-input" type="number" id="cv_steps_value" data-for="cv_steps" min="1" max="100" step="1" value="10">
             </div>
-            <div>
-                <label for="cv_steps">Sampling Steps</label>
-                <input id="cv_steps" type="number" class="text_pole" value="10" min="1" max="100" step="1" />
+            <div class="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
+                <small>Guidance Scale</small>
+                <input class="neo-range-slider" type="range" id="cv_guidance" min="0" max="20" step="0.1" value="6.0">
+                <input class="neo-range-input" type="number" id="cv_guidance_value" data-for="cv_guidance" min="0" max="20" step="0.1" value="6.0">
             </div>
-            <div>
+        </div>
+        <div class="flex-container">
+            <div class="flex1">
                 <label for="cv_sampler_high">High-Noise Sampler</label>
                 <select id="cv_sampler_high">
-                    <option value="euler_ancestral" selected>euler_ancestral (Recommended for NSFW-22)</option>
+                    <option value="euler_ancestral" selected>euler_ancestral</option>
+                    <option value="uni_pc">uni_pc</option>
                     <option value="res_2m">res_2m</option>
                     <option value="res_2s">res_2s</option>
                     <option value="euler">euler</option>
@@ -88,22 +148,25 @@
                     <option value="res_multistep">res_multistep</option>
                 </select>
             </div>
-            <div>
+            <div class="flex1">
                 <label for="cv_sampler_low">Low-Noise Sampler</label>
                 <select id="cv_sampler_low">
-                    <option value="euler_ancestral" selected>euler_ancestral (Recommended for NSFW-22)</option>
+                    <option value="euler_ancestral" selected>euler_ancestral</option>
+                    <option value="euler">euler</option>
+                    <option value="uni_pc">uni_pc</option>
                     <option value="res_2s">res_2s</option>
                     <option value="res_2m">res_2m</option>
-                    <option value="euler">euler</option>
                     <option value="dpmpp_2m">dpmpp_2m</option>
                     <option value="dpmpp_2s_ancestral">dpmpp_2s_ancestral</option>
                     <option value="res_multistep_ancestral">res_multistep_ancestral</option>
                 </select>
             </div>
-            <div>
+        </div>
+        <div class="flex-container">
+            <div class="flex1">
                 <label for="cv_scheduler">Scheduler</label>
                 <select id="cv_scheduler">
-                    <option value="normal" selected>normal (Recommended for NSFW-22)</option>
+                    <option value="normal" selected>normal</option>
                     <option value="beta">beta</option>
                     <option value="simple">simple</option>
                     <option value="karras">karras</option>
@@ -112,70 +175,82 @@
                     <option value="kl_optimal">kl_optimal</option>
                 </select>
             </div>
-            <div>
-                <label for="cv_guidance">Guidance Scale (CFG)</label>
-                <input id="cv_guidance" type="number" class="text_pole" value="6.0" min="0.0" max="20" step="0.1" />
-            </div>
-            <div>
-                <label for="cv_cfg_high">High-Noise CFG (Stepped)</label>
-                <input id="cv_cfg_high" type="number" class="text_pole" value="2.0" min="0.0" max="20" step="0.1" />
-                <small>Use 2.0 for NSFW-22 LoRA</small>
-            </div>
-            <div>
-                <label for="cv_cfg_low">Low-Noise CFG (Stepped)</label>
-                <input id="cv_cfg_low" type="number" class="text_pole" value="1.0" min="0.0" max="20" step="0.1" />
-                <small>Use 1.0 for NSFW-22 LoRA</small>
-            </div>
-            <div>
-                <label for="cv_use_lora">
-                    <input id="cv_use_lora" type="checkbox" checked />
-                    Enable LoRA (Auto-adds nsfwsk trigger)
+        </div>
+        <div class="flex-container flexnowrap">
+            <div class="flex1">
+                <label for="cv_seed">
+                    Seed
+                    <small>(-1 for random)</small>
                 </label>
+                <input id="cv_seed" type="number" class="text_pole" value="-1" min="-1" step="1" />
             </div>
-            <div>
-                <label for="cv_shift">Shift (noise schedule)</label>
-                <input id="cv_shift" type="number" class="text_pole" value="8.0" min="0.0" max="20" step="0.5" />
-            </div>
-            <div>
-                <label for="cv_split_point">High-Noise Ratio</label>
-                <input id="cv_split_point" type="range" class="text_pole" value="50" min="20" max="80" step="5" />
-                <small id="cv_split_display">50% (5 high / 5 low on 10 steps)</small>
-            </div>
-            <div>
-                <label for="cv_prompt">Prompt Override</label>
-                <input id="cv_prompt" type="text" class="text_pole" placeholder="Optional. Leave empty to auto-caption image." />
-            </div>
-            <div>
-                <label for="cv_negative_prompt">Negative Prompt</label>
-                <input id="cv_negative_prompt" type="text" class="text_pole" value="blurry, distorted, low quality, artifacts, watermark, static" />
-            </div>
-            <div>
-                <label for="cv_use_end_frame">
-                    <input id="cv_use_end_frame" type="checkbox" />
-                    Use End Frame (FLF2V)
-                </label>
-            </div>
-            <div>
-                <label for="cv_use_sageattn">
-                    <input id="cv_use_sageattn" type="checkbox" checked />
-                    Use SageAttention (faster on RTX 3090)
-                </label>
-            </div>
-            <div>
-                <label for="cv_sage_attn_mode">SageAttention Backend</label>
-                <select id="cv_sage_attn_mode">
-                    <option value="auto" selected>auto (Recommended - auto-detects best for your GPU)</option>
-                    <option value="sdpa">sdpa (PyTorch standard - most compatible)</option>
-                    <option value="sageattn_qk_int8_pv_fp16_cuda">sageattn_qk_int8_pv_fp16_cuda (Fast, can cause artifacts)</option>
-                    <option value="sageattn_qk_int8_pv_fp16_triton">sageattn_qk_int8_pv_fp16_triton</option>
-                    <option value="sageattn_qk_int8_pv_fp8_cuda">sageattn_qk_int8_pv_fp8_cuda</option>
-                    <option value="sageattn3">sageattn3 (Newer, for newer GPUs)</option>
-                </select>
-            </div>
-            <div>
-                <button id="cv_refresh_models" class="menu_button">
-                    <i class="fa-solid fa-refresh"></i> Refresh Model List
-                </button>
+            <div id="cv_randomize_seed" class="menu_button menu_button_icon" title="Randomize seed">
+                <i class="fa-solid fa-dice"></i>
             </div>
         </div>
+
+        <h4>Noise & CFG</h4>
+        <div class="flex-container">
+            <div class="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
+                <small>Shift</small>
+                <input class="neo-range-slider" type="range" id="cv_shift" min="0" max="20" step="0.5" value="8.0">
+                <input class="neo-range-input" type="number" id="cv_shift_value" data-for="cv_shift" min="0" max="20" step="0.5" value="8.0">
+            </div>
+            <div class="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
+                <small>High-Noise Ratio</small>
+                <input class="neo-range-slider" type="range" id="cv_split_point" min="20" max="80" step="5" value="50">
+                <input class="neo-range-input" type="number" id="cv_split_point_value" data-for="cv_split_point" min="20" max="80" step="5" value="50">
+                <small id="cv_split_display">50% (5 high / 5 low on 10 steps)</small>
+            </div>
+        </div>
+        <div class="flex-container">
+            <div class="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
+                <small>High-Noise CFG</small>
+                <input class="neo-range-slider" type="range" id="cv_cfg_high" min="0" max="20" step="0.1" value="2.0">
+                <input class="neo-range-input" type="number" id="cv_cfg_high_value" data-for="cv_cfg_high" min="0" max="20" step="0.1" value="2.0">
+            </div>
+            <div class="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
+                <small>Low-Noise CFG</small>
+                <input class="neo-range-slider" type="range" id="cv_cfg_low" min="0" max="20" step="0.1" value="1.0">
+                <input class="neo-range-input" type="number" id="cv_cfg_low_value" data-for="cv_cfg_low" min="0" max="20" step="0.1" value="1.0">
+            </div>
+        </div>
+
+        <h4>Attention</h4>
+        <div class="flex-container marginTopBot5">
+            <label class="flex1 checkbox_label">
+                <input id="cv_use_sageattn" type="checkbox" checked />
+                <small>Use SageAttention</small>
+            </label>
+        </div>
+        <div>
+            <label for="cv_sage_attn_mode">SageAttention Backend</label>
+            <select id="cv_sage_attn_mode">
+                <option value="auto" selected>auto</option>
+                <option value="sdpa">sdpa</option>
+                <option value="sageattn_qk_int8_pv_fp16_cuda">sageattn_qk_int8_pv_fp16_cuda</option>
+                <option value="sageattn_qk_int8_pv_fp16_triton">sageattn_qk_int8_pv_fp16_triton</option>
+                <option value="sageattn_qk_int8_pv_fp8_cuda">sageattn_qk_int8_pv_fp8_cuda</option>
+                <option value="sageattn3">sageattn3</option>
+            </select>
+        </div>
+
+        <h4>Prompts</h4>
+        <div>
+            <label for="cv_prompt_prefix">Prompt Prefix</label>
+            <small>Add trigger words here. For NSFW LoRA, add "nsfwsk" (without quotes).</small>
+            <input id="cv_prompt_prefix" type="text" class="text_pole" placeholder="e.g. nsfwsk" />
+        </div>
+        <div>
+            <label for="cv_negative_prompt">Negative Prompt</label>
+            <input id="cv_negative_prompt" type="text" class="text_pole" value="blurry, distorted, low quality, artifacts, watermark, static" />
+        </div>
+
+        <h4>Actions</h4>
+        <div>
+            <button id="cv_refresh_models" class="menu_button">
+                <i class="fa-solid fa-refresh"></i> Refresh Model List
+            </button>
+        </div>
+    </div>
 </div>

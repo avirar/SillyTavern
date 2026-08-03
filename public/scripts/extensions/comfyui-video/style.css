@@ -15,3 +15,65 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
 }
+
+#cv_comfy_workflow_editor_template {
+    height: 100%;
+}
+
+.cv_comfy_workflow_editor {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.cv_comfy_workflow_editor_content {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: row;
+}
+
+.cv_comfy_workflow_editor_workflow_container {
+    flex: 1 1 auto;
+}
+
+#cv_comfy_workflow_editor_workflow {
+    font-family: monospace;
+}
+
+.cv_comfy_workflow_editor_placeholder_container {
+    flex: 0 0 auto;
+}
+
+.cv_comfy_workflow_editor_placeholder_list {
+    font-size: x-small;
+    list-style: none;
+    margin: 5px 0;
+    padding: 3px 5px;
+    text-align: left;
+}
+
+.cv_comfy_workflow_editor_placeholder_list > li[data-placeholder]:before {
+    content: "\2705 ";
+}
+
+.cv_comfy_workflow_editor_placeholder_list > li.cv_comfy_workflow_editor_not_found:before {
+    content: "\274C ";
+}
+
+.cv_comfy_workflow_editor_placeholder_list input {
+    font-size: inherit;
+    margin: 0;
+}
+
+.cv_comfy_workflow_editor_custom_remove,
+#cv_comfy_workflow_editor_placeholder_add {
+    cursor: pointer;
+    font-weight: bold;
+    width: 1em;
+    opacity: 0.5;
+}
+
+.cv_comfy_workflow_editor_custom_remove:hover,
+#cv_comfy_workflow_editor_placeholder_add:hover {
+    opacity: 1;
+}

@@ -12,24 +12,24 @@ import {
     getContext,
     renderExtensionTemplateAsync,
 } from '../../extensions.js';
-import { getBase64Async, saveBase64AsFile } from '../../utils.js';
+import { getBase64Async, saveBase64AsFile, delay } from '../../utils.js';
 import { getMessageTimeStamp } from '../../RossAscends-mods.js';
 import { debounce_timeout, MEDIA_DISPLAY, MEDIA_TYPE, MEDIA_SOURCE, SCROLL_BEHAVIOR } from '../../constants.js';
 import { getMultimodalCaption } from '../shared.js';
+import { callGenericPopup, Popup, POPUP_TYPE } from '../../popup.js';
 export { MODULE_NAME };
 
 const MODULE_NAME = 'comfyui-video';
 
+const DEFAULT_WORKFLOW = 'Wan22_I2V_Default_Workflow.json';
+
 async function getComfyUrl() {
     const settings = extension_settings[MODULE_NAME] || {};
-    console.log('[ComfyUI-Video] getComfyUrl - settings:', settings);
     if (settings.url) {
-        console.log('[ComfyUI-Video] getComfyUrl - using settings.url:', settings.url);
         return settings.url;
     }
     const sdSettings = extension_settings.sd || {};
     const url = sdSettings.comfy_url || 'http://192.168.1.202:7801/ComfyBackendDirect';
-    console.log('[ComfyUI-Video] getComfyUrl - fallback to sd.comfy_url or default:', url);
     return url;
 }
 
@@ -43,9 +43,7 @@ async function fetchJson(url, options = {}) {
 
 async function loadModelsList() {
     const url = await getComfyUrl();
-    console.log('[ComfyUI-Video] loadModelsList - url:', url);
     if (!url) {
-        console.warn('[ComfyUI-Video] No ComfyUI URL configured, returning empty model lists');
         return { loras: [], vaes: [], textEncoders: [], unets: [] };
     }
     try {
@@ -62,167 +60,213 @@ async function loadModelsList() {
     }
 }
 
-function buildWan22I2VWorkflow(imageFilename, prompt, negativePrompt, settings) {
-    const seed = settings.seed < 0 ? Math.floor(Math.random() * 2147483647) : (settings.seed ?? 0);
-    const guidance = settings.guidance ?? 6.0;
-    const shift = settings.shift ?? 8.0;
-    const fps = settings.fps ?? 24;
-    const width = settings.width ?? 768;
-    const height = settings.height ?? 768;
-    const steps = settings.steps ?? 10;
-    const useSageAttn = settings.useSageAttn ?? true;
-    const sageAttnMode = settings.sageAttnMode ?? 'auto';
-    const splitRatio = (settings.splitPoint ?? 50) / 100;
-    const splitStep = Math.max(1, Math.round(steps * splitRatio));
-
-    // Sampler and scheduler settings
-    const samplerHigh = settings.samplerHigh ?? 'euler_ancestral';
-    const samplerLow = settings.samplerLow ?? 'euler_ancestral';
-    const scheduler = settings.scheduler ?? 'normal';
-
-    // Stepped CFG and LoRA settings
-    const cfgHigh = settings.cfgHigh ?? 2.0;
-    const cfgLow = settings.cfgLow ?? 1.0;
-    const useLora = settings.useLora ?? true;
-
-    // Add trigger word to prompt if LoRA enabled
-    const triggerWord = useLora ? "nsfwsk " : "";
-    const posPrompt = triggerWord + (prompt?.trim() || 'high quality, smooth motion, cinematic');
-    const negPrompt = negativePrompt?.trim() || 'blurry, distorted, low quality, artifacts';
-
-    const unetHigh = 'wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors';
-    const unetLow = 'wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors';
-    const textEncoder = 'umt5_xxl_fp8_e4m3fn_scaled.safetensors';
-    const vae = 'Wan2_1_VAE_bf16.safetensors';
-
-    // LoRA settings - only add LoRA nodes if enabled
-    const loraNameHigh = 'NSFW-22-H-e8.safetensors';
-    const loraNameLow = 'NSFW-22-L-e8.safetensors';
-    const loraStrengthHigh = 0.9;
-    const loraStrengthLow = 0.9;
-
-    const nodes = {};
-
-    nodes["1"] = { "class_type": "LoadImage", "inputs": { "image": imageFilename } };
-    nodes["2"] = {
-        "class_type": "CLIPLoader",
-        "inputs": {
-            "clip_name": textEncoder,
-            "type": "wan",
-            "device": "default",
+async function loadComfyWorkflows() {
+    try {
+        const result = await fetch('/api/comfyui-video/workflows', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+        });
+        if (!result.ok) {
+            throw new Error('Failed to list workflows.');
         }
-    };
-    nodes["3"] = { "class_type": "CLIPTextEncode", "inputs": { "text": posPrompt, "clip": ["2", 0] } };
-    nodes["4"] = { "class_type": "CLIPTextEncode", "inputs": { "text": negPrompt, "clip": ["2", 0] } };
-    nodes["5"] = { "class_type": "VAELoader", "inputs": { "vae_name": vae } };
-    nodes["6"] = {
-        "class_type": "WanImageToVideo",
-        "inputs": {
-            "positive": ["3", 0],
-            "negative": ["4", 0],
-            "vae": ["5", 0],
-            "width": width,
-            "height": height,
-            "length": 81,
-            "batch_size": 1,
-            "start_image": ["1", 0],
+        const workflows = await result.json();
+        const settings = extension_settings[MODULE_NAME] || {};
+        const select = $('#cv_workflow');
+        select.empty();
+        for (const workflow of workflows) {
+            const option = document.createElement('option');
+            option.innerText = workflow;
+            option.value = workflow;
+            option.selected = workflow === (settings.workflow || DEFAULT_WORKFLOW);
+            select.append(option);
         }
-    };
-    nodes["7"] = { "class_type": "UNETLoader", "inputs": { "unet_name": unetHigh, "weight_dtype": "default" } };
-    nodes["8"] = { "class_type": "UNETLoader", "inputs": { "unet_name": unetLow, "weight_dtype": "default" } };
+        settings.workflow = select.val() || DEFAULT_WORKFLOW;
+    } catch (error) {
+        console.error(`[ComfyUI-Video] Could not load workflows: ${error.message}`);
+    }
+}
 
-    // LoRA nodes - inserted between UNETLoader and attention/sampling
-    // Using LoraLoaderModelOnly (standard ComfyUI node) - only modifies MODEL, not CLIP
-    if (useLora) {
-        nodes["17"] = {
-            "class_type": "LoraLoaderModelOnly",
-            "inputs": {
-                "model": ["7", 0],
-                "lora_name": loraNameHigh,
-                "strength_model": loraStrengthHigh
-            }
-        };
-        nodes["18"] = {
-            "class_type": "LoraLoaderModelOnly",
-            "inputs": {
-                "model": ["8", 0],
-                "lora_name": loraNameLow,
-                "strength_model": loraStrengthLow
-            }
-        };
+async function onComfyOpenWorkflowEditorClick() {
+    const settings = extension_settings[MODULE_NAME] || {};
+    let workflow = await (await fetch('/api/comfyui-video/workflow', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({
+            file_name: settings.workflow,
+        }),
+    })).json();
+
+    const editorHtml = $(await $.get('scripts/extensions/comfyui-video/comfyWorkflowEditor.html'));
+    const saveValue = (/** @type {Popup} */ _popup) => {
+        workflow = $('#cv_comfy_workflow_editor_workflow').val().toString();
+        return true;
+    };
+    const popup = new Popup(editorHtml, POPUP_TYPE.CONFIRM, '', { okButton: 'Save', cancelButton: 'Cancel', wide: true, large: true, onClosing: saveValue });
+    const popupResult = popup.show();
+
+    const checkPlaceholders = () => {
+        workflow = $('#cv_comfy_workflow_editor_workflow').val().toString();
+        $('.cv_comfy_workflow_editor_placeholder_list > li[data-placeholder]').each(function () {
+            const key = this.getAttribute('data-placeholder');
+            const found = workflow.search(`%${key}%`) !== -1;
+            this.classList[found ? 'remove' : 'add']('cv_comfy_workflow_editor_not_found');
+        });
+    };
+
+    $('#cv_comfy_workflow_editor_name').text(settings.workflow);
+    $('#cv_comfy_workflow_editor_workflow').val(workflow);
+
+    const addPlaceholderDom = (placeholder) => {
+        const el = $(`
+            <li class="cv_comfy_workflow_editor_not_found" data-placeholder="${placeholder.find}">
+                <span class="cv_comfy_workflow_editor_custom_remove" title="Remove custom placeholder">\u2298</span>
+                <span class="cv_comfy_workflow_editor_custom_final">"%${placeholder.find}%"</span><br>
+                <input placeholder="find" title="find" type="text" class="text_pole cv_comfy_workflow_editor_custom_find" value=""><br>
+                <input placeholder="replace" title="replace" type="text" class="text_pole cv_comfy_workflow_editor_custom_replace">
+            </li>
+        `);
+        $('#cv_comfy_workflow_editor_placeholder_list_custom').append(el);
+        el.find('.cv_comfy_workflow_editor_custom_find').val(placeholder.find);
+        el.find('.cv_comfy_workflow_editor_custom_find').on('input', function () {
+            if (!(this instanceof HTMLInputElement)) return;
+            placeholder.find = this.value;
+            el.find('.cv_comfy_workflow_editor_custom_final').text(`"%${this.value}%"`);
+            el.attr('data-placeholder', `${this.value}`);
+            checkPlaceholders();
+            saveSettingsDebounced();
+        });
+        el.find('.cv_comfy_workflow_editor_custom_replace').val(placeholder.replace);
+        el.find('.cv_comfy_workflow_editor_custom_replace').on('input', function () {
+            if (!(this instanceof HTMLInputElement)) return;
+            placeholder.replace = this.value;
+            saveSettingsDebounced();
+        });
+        el.find('.cv_comfy_workflow_editor_custom_remove').on('click', () => {
+            el.remove();
+            const phs = extension_settings[MODULE_NAME].comfyPlaceholders;
+            const idx = phs.indexOf(placeholder);
+            if (idx !== -1) phs.splice(idx, 1);
+            saveSettingsDebounced();
+        });
+    };
+
+    $('#cv_comfy_workflow_editor_placeholder_add').on('click', () => {
+        if (!extension_settings[MODULE_NAME].comfyPlaceholders) {
+            extension_settings[MODULE_NAME].comfyPlaceholders = [];
+        }
+        const placeholder = { find: '', replace: '' };
+        extension_settings[MODULE_NAME].comfyPlaceholders.push(placeholder);
+        addPlaceholderDom(placeholder);
+        saveSettingsDebounced();
+    });
+
+    (extension_settings[MODULE_NAME].comfyPlaceholders ?? []).forEach(placeholder => {
+        addPlaceholderDom(placeholder);
+    });
+
+    checkPlaceholders();
+    $('#cv_comfy_workflow_editor_workflow').on('input', checkPlaceholders);
+
+    if (await popupResult) {
+        const response = await fetch('/api/comfyui-video/save-workflow', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({
+                file_name: extension_settings[MODULE_NAME].workflow,
+                workflow: workflow,
+            }),
+        });
+        if (!response.ok) {
+            const text = await response.text();
+            toastr.error(`Failed to save workflow.\n\n${text}`);
+        }
+    }
+}
+
+async function onComfyNewWorkflowClick() {
+    let name = await callGenericPopup('Workflow name:', POPUP_TYPE.INPUT);
+    if (!name) return;
+    if (!String(name).toLowerCase().endsWith('.json')) {
+        name += '.json';
+    }
+    extension_settings[MODULE_NAME].workflow = name;
+    const response = await fetch('/api/comfyui-video/save-workflow', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({
+            file_name: name,
+            workflow: '',
+        }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        toastr.error(`Failed to save workflow.\n\n${text}`);
+    }
+    saveSettingsDebounced();
+    await loadComfyWorkflows();
+    await delay(200);
+    await onComfyOpenWorkflowEditorClick();
+}
+
+async function onComfyDeleteWorkflowClick() {
+    const confirm = await callGenericPopup('Delete the workflow? This action is irreversible.', POPUP_TYPE.CONFIRM, '', { okButton: 'Delete', cancelButton: 'Cancel' });
+    if (!confirm) return;
+    const response = await fetch('/api/comfyui-video/delete-workflow', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({
+            file_name: extension_settings[MODULE_NAME].workflow,
+        }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        toastr.error(`Failed to delete workflow.\n\n${text}`);
+    }
+    extension_settings[MODULE_NAME].workflow = DEFAULT_WORKFLOW;
+    saveSettingsDebounced();
+    await loadComfyWorkflows();
+}
+
+async function onComfyRenameWorkflowClick() {
+    const oldName = extension_settings[MODULE_NAME].workflow;
+    if (!oldName) return;
+
+    let newName = await callGenericPopup('Enter new workflow name:', POPUP_TYPE.INPUT, oldName);
+    if (!newName) return;
+
+    newName = String(newName).trim();
+    if (!newName.toLowerCase().endsWith('.json')) {
+        newName += '.json';
+    }
+    if (newName === oldName) return;
+
+    const existingWorkflow = Array
+        .from(document.querySelectorAll('#cv_workflow option'))
+        .find(opt => opt instanceof HTMLOptionElement && opt.value === newName);
+
+    if (existingWorkflow) {
+        toastr.warning('A workflow with that name already exists');
+        return;
     }
 
-    if (useSageAttn) {
-        nodes["9"] = {
-            "class_type": "PathchSageAttentionKJ",
-            "inputs": {
-                "model": useLora ? ["17", 0] : ["7", 0],
-                "sage_attention": sageAttnMode,
-            }
-        };
-        nodes["10"] = {
-            "class_type": "PathchSageAttentionKJ",
-            "inputs": {
-                "model": useLora ? ["18", 0] : ["8", 0],
-                "sage_attention": sageAttnMode,
-            }
-        };
-        nodes["11"] = { "class_type": "ModelSamplingSD3", "inputs": { "model": ["9", 0], "shift": shift } };
-        nodes["12"] = { "class_type": "ModelSamplingSD3", "inputs": { "model": ["10", 0], "shift": shift } };
-    } else {
-        nodes["9"] = { "class_type": "ModelSamplingSD3", "inputs": { "model": useLora ? ["17", 0] : ["7", 0], "shift": shift } };
-        nodes["10"] = { "class_type": "ModelSamplingSD3", "inputs": { "model": useLora ? ["18", 0] : ["8", 0], "shift": shift } };
+    const response = await fetch('/api/comfyui-video/rename-workflow', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({
+            old_name: oldName,
+            new_name: newName,
+        }),
+    });
+
+    if (!response.ok) {
+        const text = await response.text();
+        toastr.error(`Failed to rename workflow.\n\n${text}`);
+        return;
     }
 
-    nodes["13"] = {
-        "class_type": "KSamplerAdvanced",
-        "inputs": {
-            "model": ["9", 0],
-            "add_noise": "enable",
-            "noise_seed": seed,
-            "steps": steps,
-            "cfg": cfgHigh,
-            "sampler_name": samplerHigh,
-            "scheduler": scheduler,
-            "positive": ["6", 0],
-            "negative": ["6", 1],
-            "latent_image": ["6", 2],
-            "start_at_step": 0,
-            "end_at_step": splitStep,
-            "return_with_leftover_noise": "enable",
-        }
-    };
-    nodes["14"] = {
-        "class_type": "KSamplerAdvanced",
-        "inputs": {
-            "model": ["10", 0],
-            "add_noise": "disable",
-            "noise_seed": seed,
-            "steps": steps,
-            "cfg": cfgLow,
-            "sampler_name": samplerLow,
-            "scheduler": scheduler,
-            "positive": ["6", 0],
-            "negative": ["6", 1],
-            "latent_image": ["13", 0],
-            "start_at_step": splitStep,
-            "end_at_step": 10000,
-            "return_with_leftover_noise": "disable",
-        }
-    };
-    nodes["15"] = { "class_type": "VAEDecode", "inputs": { "samples": ["14", 0], "vae": ["5", 0] } };
-    nodes["16"] = {
-        "class_type": "SaveWEBM",
-        "inputs": {
-            "images": ["15", 0],
-            "filename_prefix": "ComfyUI/video",
-            "codec": "vp9",
-            "fps": fps,
-            "crf": 16,
-        }
-    };
-
-    return nodes;
+    extension_settings[MODULE_NAME].workflow = newName;
+    saveSettingsDebounced();
+    await loadComfyWorkflows();
 }
 
 function migrateSettings() {
@@ -233,8 +277,13 @@ function migrateSettings() {
     const sdSettings = extension_settings.sd || {};
     if (!s.url) {
         s.url = sdSettings.comfy_url || 'http://192.168.1.202:7801/ComfyBackendDirect';
-        console.log('[ComfyUI-Video] migrateSettings - set URL to:', s.url);
         saveSettingsDebounced();
+    }
+    if (s.workflow === undefined) {
+        s.workflow = DEFAULT_WORKFLOW;
+    }
+    if (s.comfyPlaceholders === undefined) {
+        s.comfyPlaceholders = [];
     }
     if (s.unetHigh === undefined) {
         s.unetHigh = '';
@@ -247,6 +296,12 @@ function migrateSettings() {
     }
     if (s.shift === undefined) {
         s.shift = 8.0;
+    }
+    if (s.fps === undefined) {
+        s.fps = 16;
+    }
+    if (s.duration === undefined) {
+        s.duration = 5;
     }
     if (s.steps === undefined) {
         s.steps = 10;
@@ -285,30 +340,165 @@ function migrateSettings() {
         s.cfgLow = 1.0;
     }
     if (s.useLora === undefined) {
-        s.useLora = true;
+        s.useLora = false;
     }
+    if (s.loraWeight === undefined) {
+        s.loraWeight = 0.9;
+    }
+    if (s.loraHigh === undefined) {
+        s.loraHigh = '';
+    }
+    if (s.loraLow === undefined) {
+        s.loraLow = '';
+    }
+    if (s.promptPrefix === undefined) {
+        s.promptPrefix = '';
+    }
+    if (s.sendImage === undefined) {
+        s.sendImage = true;
+    }
+}
+
+/**
+ * Computes a MiniMax H3-valid frame length (frames = 1 mod 17 on the model's
+ * 17-per-block grid, rounded up) from a requested duration in seconds at 24fps.
+ * @param {number} duration Duration in seconds.
+ * @param {number} fps Frames per second.
+ * @returns {number} Grid-valid frame count.
+ */
+function getH3VideoLength(duration, fps) {
+    const frames = Math.max(5, Math.round(duration * fps));
+    return frames + ((5 - (frames % 17) + 17) % 17);
+}
+
+/**
+ * Removes the LoadImage node and any first/last-frame conditioning from an
+ * API-format workflow string, so it runs as pure text-to-video. Nodes of other
+ * model types that consumed the removed image are cleaned up as well.
+ * @param {string} workflow Serialized API-format workflow.
+ * @returns {string} Serialized workflow without image-to-video inputs.
+ */
+function stripFirstFrame(workflow) {
+    const graph = JSON.parse(workflow);
+    for (const [id, node] of Object.entries(graph)) {
+        if (node.class_type === 'LoadImage') {
+            delete graph[id];
+        }
+    }
+    const refsValid = (ref) => Array.isArray(ref) && graph[ref[0]];
+    for (const [id, node] of Object.entries(graph)) {
+        if (!node.inputs) continue;
+        if (node.class_type === 'MiniMaxH3ImageToVideo') {
+            delete node.inputs.first_frame;
+            delete node.inputs.last_frame;
+        }
+        for (const key of Object.keys(node.inputs)) {
+            if (Array.isArray(node.inputs[key]) && !refsValid(node.inputs[key])) {
+                delete node.inputs[key];
+            }
+        }
+    }
+    return JSON.stringify(graph);
 }
 
 async function generateVideo(imageBase64, prompt, negativePrompt, settings) {
     const url = await getComfyUrl();
     if (!url) throw new Error('ComfyUI URL not configured.');
 
-    const uploadResponse = await fetch('/api/comfyui-video/upload', {
+    const sendImage = settings.sendImage ?? true;
+    let filename = null;
+
+    if (sendImage) {
+        const uploadResponse = await fetch('/api/comfyui-video/upload', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ url, image: imageBase64 }),
+        });
+        if (!uploadResponse.ok) {
+            throw new Error('Failed to upload image: ' + await uploadResponse.text());
+        }
+        ({ filename } = await uploadResponse.json());
+    }
+
+    const workflowResponse = await fetch('/api/comfyui-video/workflow', {
         method: 'POST',
         headers: getRequestHeaders(),
-        body: JSON.stringify({ url, image: imageBase64 }),
+        body: JSON.stringify({ file_name: settings.workflow || DEFAULT_WORKFLOW }),
     });
-    if (!uploadResponse.ok) {
-        throw new Error('Failed to upload image: ' + await uploadResponse.text());
+    if (!workflowResponse.ok) {
+        throw new Error('Failed to load workflow: ' + await workflowResponse.text());
     }
-    const { filename } = await uploadResponse.json();
+    let workflow = await workflowResponse.json();
 
-    const workflow = buildWan22I2VWorkflow(filename, prompt, negativePrompt, settings);
+    const seed = settings.seed < 0 ? Math.floor(Math.random() * 2147483647) : (settings.seed ?? 0);
+    const fps = settings.fps ?? 16;
+    const duration = settings.duration ?? 5;
+    const length = (duration * fps) + 1;
+    const width = settings.width ?? 768;
+    const height = settings.height ?? 768;
+    const steps = settings.steps ?? 10;
+    const splitRatio = (settings.splitPoint ?? 50) / 100;
+    const splitStep = Math.max(1, Math.round(steps * splitRatio));
+    const guidance = settings.guidance ?? 6.0;
+    const shift = settings.shift ?? 8.0;
+    const cfgHigh = settings.cfgHigh ?? 2.0;
+    const cfgLow = settings.cfgLow ?? 1.0;
+    const useSageAttn = settings.useSageAttn ?? true;
+    const sageAttnMode = settings.sageAttnMode ?? 'auto';
+    const samplerHigh = settings.samplerHigh ?? 'euler_ancestral';
+    const samplerLow = settings.samplerLow ?? 'euler_ancestral';
+    const scheduler = settings.scheduler ?? 'normal';
+    const useLora = settings.useLora ?? false;
+    const loraWeight = settings.loraWeight ?? 0.9;
+    const unetHigh = settings.unetHigh || 'wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors';
+    const unetLow = settings.unetLow || 'wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors';
+    const textEncoder = settings.textEncoder || 'umt5_xxl_fp8_e4m3fn_scaled.safetensors';
+    const vae = settings.vae || 'Wan2_1_VAE_bf16.safetensors';
+    const loraHigh = settings.loraHigh || '';
+    const loraLow = settings.loraLow || '';
+
+    workflow = workflow.replaceAll('"%image%"', JSON.stringify(filename || ''));
+    workflow = workflow.replaceAll('"%prompt%"', JSON.stringify(prompt));
+    workflow = workflow.replaceAll('"%negative_prompt%"', JSON.stringify(negativePrompt));
+    workflow = workflow.replaceAll('"%text_encoder%"', JSON.stringify(textEncoder));
+    workflow = workflow.replaceAll('"%vae%"', JSON.stringify(vae));
+    workflow = workflow.replaceAll('"%unet_high%"', JSON.stringify(unetHigh));
+    workflow = workflow.replaceAll('"%unet_low%"', JSON.stringify(unetLow));
+    workflow = workflow.replaceAll('"%sampler_high%"', JSON.stringify(samplerHigh));
+    workflow = workflow.replaceAll('"%sampler_low%"', JSON.stringify(samplerLow));
+    workflow = workflow.replaceAll('"%scheduler%"', JSON.stringify(scheduler));
+    workflow = workflow.replaceAll('"%sage_attn_mode%"', JSON.stringify(sageAttnMode));
+    workflow = workflow.replaceAll('"%lora_high%"', JSON.stringify(loraHigh));
+    workflow = workflow.replaceAll('"%lora_low%"', JSON.stringify(loraLow));
+    workflow = workflow.replaceAll('%seed%', JSON.stringify(seed));
+    workflow = workflow.replaceAll('%width%', JSON.stringify(width));
+    workflow = workflow.replaceAll('%height%', JSON.stringify(height));
+    workflow = workflow.replaceAll('%length%', JSON.stringify(length));
+    workflow = workflow.replaceAll('%h3_length%', JSON.stringify(getH3VideoLength(duration, fps)));
+    workflow = workflow.replaceAll('%steps%', JSON.stringify(steps));
+    workflow = workflow.replaceAll('%split_step%', JSON.stringify(splitStep));
+    workflow = workflow.replaceAll('%guidance%', JSON.stringify(guidance));
+    workflow = workflow.replaceAll('%shift%', JSON.stringify(shift));
+    workflow = workflow.replaceAll('%cfg_high%', JSON.stringify(cfgHigh));
+    workflow = workflow.replaceAll('%cfg_low%', JSON.stringify(cfgLow));
+    workflow = workflow.replaceAll('%fps%', JSON.stringify(fps));
+    workflow = workflow.replaceAll('%lora_weight%', JSON.stringify(loraWeight));
+
+    (settings.comfyPlaceholders ?? []).forEach(ph => {
+        workflow = workflow.replaceAll(`"%${ph.find}%"`, JSON.stringify(ph.replace));
+        workflow = workflow.replaceAll(`%${ph.find}%`, JSON.stringify(ph.replace));
+    });
+
+    if (!sendImage) {
+        workflow = stripFirstFrame(workflow);
+    }
+
+    console.log('[ComfyUI-Video] Final workflow:', workflow);
 
     const response = await fetch('/api/comfyui-video/generate', {
         method: 'POST',
         headers: getRequestHeaders(),
-        body: JSON.stringify({ url, prompt: JSON.stringify({ prompt: workflow }) }),
+        body: JSON.stringify({ url, prompt: JSON.stringify({ prompt: JSON.parse(workflow) }) }),
     });
 
     if (!response.ok) {
@@ -335,6 +525,23 @@ jQuery(async function () {
     async function bindSettings() {
         const settings = extension_settings[MODULE_NAME] || {};
 
+        await loadComfyWorkflows();
+
+        $('#cv_comfy_url').val(settings.url || '').on('input', function () {
+            settings.url = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $('#cv_workflow').on('change', function () {
+            settings.workflow = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $('#cv_open_workflow_editor').on('click', onComfyOpenWorkflowEditorClick);
+        $('#cv_new_workflow').on('click', onComfyNewWorkflowClick);
+        $('#cv_rename_workflow').on('click', onComfyRenameWorkflowClick);
+        $('#cv_delete_workflow').on('click', onComfyDeleteWorkflowClick);
+
         $('#cv_randomize_seed').on('click', () => {
             $('#cv_seed').val(Math.floor(Math.random() * 2147483647));
         });
@@ -351,19 +558,22 @@ jQuery(async function () {
             const unetLowSelect = $('#cv_unet_low');
             const textEncSelect = $('#cv_text_encoder');
             const vaeSelect = $('#cv_vae');
-            const loraSelect = $('#cv_lora');
+            const loraHighSelect = $('#cv_lora_high');
+            const loraLowSelect = $('#cv_lora_low');
 
             unetHighSelect.empty();
             unetLowSelect.empty();
             textEncSelect.empty();
             vaeSelect.empty();
-            loraSelect.empty();
+            loraHighSelect.empty();
+            loraLowSelect.empty();
 
             unetHighSelect.append($('<option value="">Auto-detect</option>'));
             unetLowSelect.append($('<option value="">Auto-detect</option>'));
             textEncSelect.append($('<option value="">Auto (UMT5 preferred)</option>'));
             vaeSelect.append($('<option value="">Default</option>'));
-            loraSelect.append($('<option value="">None</option>'));
+            loraHighSelect.append($('<option value="">None</option>'));
+            loraLowSelect.append($('<option value="">None</option>'));
 
             if (models.unets && models.unets.length > 0) {
                 models.unets.forEach(modelName => {
@@ -387,7 +597,9 @@ jQuery(async function () {
 
             if (models.loras && models.loras.length > 0) {
                 models.loras.forEach(loraName => {
-                    loraSelect.append($(`<option value="${loraName}">${loraName}</option>`));
+                    const option = $(`<option value="${loraName}">${loraName}</option>`);
+                    loraHighSelect.append(option);
+                    loraLowSelect.append(option.clone());
                 });
             }
 
@@ -395,121 +607,170 @@ jQuery(async function () {
             unetLowSelect.val(settings.unetLow || '');
             textEncSelect.val(settings.textEncoder || '');
             vaeSelect.val(settings.vae || '');
-            loraSelect.val(settings.lora || '');
+            loraHighSelect.val(settings.loraHigh || '');
+            loraLowSelect.val(settings.loraLow || '');
 
-            unetHighSelect.on('change', function() {
+            unetHighSelect.on('change', function () {
                 settings.unetHigh = $(this).val();
                 saveSettingsDebounced();
             });
-
-            unetLowSelect.on('change', function() {
+            unetLowSelect.on('change', function () {
                 settings.unetLow = $(this).val();
                 saveSettingsDebounced();
             });
-
-            textEncSelect.on('change', function() {
+            textEncSelect.on('change', function () {
                 settings.textEncoder = $(this).val();
                 saveSettingsDebounced();
             });
-
-            vaeSelect.on('change', function() {
+            vaeSelect.on('change', function () {
                 settings.vae = $(this).val();
                 saveSettingsDebounced();
             });
-
-            loraSelect.on('change', function() {
-                settings.lora = $(this).val();
+            loraHighSelect.on('change', function () {
+                settings.loraHigh = $(this).val();
                 saveSettingsDebounced();
             });
-
-            $('#cv_seed').on('input', function() {
-                settings.seed = Number($(this).val());
-                saveSettingsDebounced();
-            });
-
-            $('#cv_use_end_frame').prop('checked', !!settings.useEndFrame).on('input', function() {
-                settings.useEndFrame = !!$(this).prop('checked');
-                saveSettingsDebounced();
-            });
-
-            $('#cv_use_sageattn').prop('checked', !!settings.useSageAttn).on('input', function() {
-                settings.useSageAttn = !!$(this).prop('checked');
-                saveSettingsDebounced();
-            });
-
-            $('#cv_sage_attn_mode').val(settings.sageAttnMode || 'auto').on('change', function() {
-                settings.sageAttnMode = $(this).val();
-                saveSettingsDebounced();
-            });
-
-            $('#cv_resolution').val(settings.resolution || '768,768').on('change', function() {
-                const [w, h] = $(this).val().split(',').map(Number);
-                settings.resolution = $(this).val();
-                settings.width = w;
-                settings.height = h;
-                saveSettingsDebounced();
-            });
-
-            $('#cv_steps').val(settings.steps ?? 10).on('input', function() {
-                settings.steps = Number($(this).val());
-                saveSettingsDebounced();
-            });
-
-            $('#cv_split_point').val(settings.splitPoint ?? 50).on('input', function() {
-                const pct = Number($(this).val());
-                settings.splitPoint = pct;
-                const steps = settings.steps ?? 10;
-                const high = Math.max(1, Math.round(steps * pct / 100));
-                $('#cv_split_display').text(`${pct}% (${high} high / ${steps - high} low on ${steps} steps)`);
-                saveSettingsDebounced();
-            }).trigger('input');
-
-            $('#cv_shift').val(settings.shift ?? 8.0).on('input', function() {
-                settings.shift = Number($(this).val());
-                saveSettingsDebounced();
-            });
-
-            $('#cv_guidance').val(settings.guidance ?? 6.0).on('input', function() {
-                settings.guidance = Number($(this).val());
-                saveSettingsDebounced();
-            });
-
-            $('#cv_cfg_high').val(settings.cfgHigh ?? 2.0).on('input', function() {
-                settings.cfgHigh = Number($(this).val());
-                saveSettingsDebounced();
-            });
-
-            $('#cv_cfg_low').val(settings.cfgLow ?? 1.0).on('input', function() {
-                settings.cfgLow = Number($(this).val());
-                saveSettingsDebounced();
-            });
-
-            $('#cv_use_lora').prop('checked', settings.useLora !== false).on('change', function() {
-                settings.useLora = $(this).is(':checked');
-                saveSettingsDebounced();
-            });
-
-            $('#cv_fps').val(settings.fps ?? 24).on('change', function() {
-                settings.fps = Number($(this).val());
-                saveSettingsDebounced();
-            });
-
-            // Sampler and scheduler settings
-            $('#cv_sampler_high').val(settings.samplerHigh || 'euler_ancestral').on('change', function() {
-                settings.samplerHigh = $(this).val();
-                saveSettingsDebounced();
-            });
-
-            $('#cv_sampler_low').val(settings.samplerLow || 'euler_ancestral').on('change', function() {
-                settings.samplerLow = $(this).val();
-                saveSettingsDebounced();
-            });
-
-            $('#cv_scheduler').val(settings.scheduler || 'normal').on('change', function() {
-                settings.scheduler = $(this).val();
+            loraLowSelect.on('change', function () {
+                settings.loraLow = $(this).val();
                 saveSettingsDebounced();
             });
         }
+
+        function setupSliderSync(sliderId, numberId, callback) {
+            const slider = document.getElementById(sliderId);
+            const number = document.getElementById(numberId);
+            if (!slider || !number) return;
+            slider.addEventListener('input', function () {
+                number.value = this.value;
+                if (callback) callback(Number(this.value));
+            });
+            number.addEventListener('input', function () {
+                slider.value = this.value;
+                if (callback) callback(Number(this.value));
+            });
+        }
+
+        setupSliderSync('cv_steps', 'cv_steps_value', (val) => {
+            settings.steps = val;
+            updateSplitDisplay();
+            saveSettingsDebounced();
+        });
+        setupSliderSync('cv_guidance', 'cv_guidance_value', (val) => {
+            settings.guidance = val;
+            saveSettingsDebounced();
+        });
+        setupSliderSync('cv_shift', 'cv_shift_value', (val) => {
+            settings.shift = val;
+            saveSettingsDebounced();
+        });
+        setupSliderSync('cv_split_point', 'cv_split_point_value', (val) => {
+            settings.splitPoint = val;
+            updateSplitDisplay();
+            saveSettingsDebounced();
+        });
+        setupSliderSync('cv_cfg_high', 'cv_cfg_high_value', (val) => {
+            settings.cfgHigh = val;
+            saveSettingsDebounced();
+        });
+        setupSliderSync('cv_cfg_low', 'cv_cfg_low_value', (val) => {
+            settings.cfgLow = val;
+            saveSettingsDebounced();
+        });
+        setupSliderSync('cv_lora_weight', 'cv_lora_weight_value', (val) => {
+            settings.loraWeight = val;
+            saveSettingsDebounced();
+        });
+
+        function updateSplitDisplay() {
+            const pct = settings.splitPoint ?? 50;
+            const steps = settings.steps ?? 10;
+            const high = Math.max(1, Math.round(steps * pct / 100));
+            $('#cv_split_display').text(`${pct}% (${high} high / ${steps - high} low on ${steps} steps)`);
+        }
+
+        $('#cv_steps_value').val(settings.steps ?? 10);
+        $('#cv_guidance_value').val(settings.guidance ?? 6.0);
+        $('#cv_shift_value').val(settings.shift ?? 8.0);
+        $('#cv_split_point_value').val(settings.splitPoint ?? 50);
+        $('#cv_cfg_high_value').val(settings.cfgHigh ?? 2.0);
+        $('#cv_cfg_low_value').val(settings.cfgLow ?? 1.0);
+        $('#cv_lora_weight_value').val(settings.loraWeight ?? 0.9);
+        updateSplitDisplay();
+
+        $('#cv_seed').val(settings.seed ?? -1).on('input', function () {
+            settings.seed = Number($(this).val());
+            saveSettingsDebounced();
+        });
+
+        $('#cv_randomize_seed').on('click', () => {
+            const newSeed = Math.floor(Math.random() * 2147483647);
+            $('#cv_seed').val(newSeed);
+            settings.seed = newSeed;
+            saveSettingsDebounced();
+        });
+
+        $('#cv_send_image').prop('checked', settings.sendImage !== false).on('change', function () {
+            settings.sendImage = $(this).is(':checked');
+            saveSettingsDebounced();
+        });
+
+        $('#cv_use_sageattn').prop('checked', settings.useSageAttn !== false).on('change', function () {
+            settings.useSageAttn = $(this).is(':checked');
+            saveSettingsDebounced();
+        });
+
+        $('#cv_use_lora').prop('checked', settings.useLora === true).on('change', function () {
+            settings.useLora = $(this).is(':checked');
+            saveSettingsDebounced();
+        });
+
+        $('#cv_sage_attn_mode').val(settings.sageAttnMode || 'auto').on('change', function () {
+            settings.sageAttnMode = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $('#cv_sampler_high').val(settings.samplerHigh || 'euler_ancestral').on('change', function () {
+            settings.samplerHigh = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $('#cv_sampler_low').val(settings.samplerLow || 'euler_ancestral').on('change', function () {
+            settings.samplerLow = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $('#cv_scheduler').val(settings.scheduler || 'normal').on('change', function () {
+            settings.scheduler = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $('#cv_resolution').val(settings.resolution || '768,768').on('change', function () {
+            const [w, h] = $(this).val().split(',').map(Number);
+            settings.resolution = $(this).val();
+            settings.width = w;
+            settings.height = h;
+            saveSettingsDebounced();
+        });
+
+        $('#cv_fps').val(settings.fps ?? 16).on('change', function () {
+            settings.fps = Number($(this).val());
+            saveSettingsDebounced();
+        });
+
+        $('#cv_duration').val(settings.duration ?? 5).on('change', function () {
+            settings.duration = Number($(this).val());
+            saveSettingsDebounced();
+        });
+
+        $('#cv_negative_prompt').val(settings.negativePrompt || '').on('input', function () {
+            settings.negativePrompt = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $('#cv_prompt_prefix').val(settings.promptPrefix || '').on('input', function () {
+            settings.promptPrefix = $(this).val();
+            saveSettingsDebounced();
+        });
 
         const models = await loadModelsList();
         populateModelDropdowns(models);
@@ -540,7 +801,6 @@ jQuery(async function () {
             if (media.source === MEDIA_SOURCE.GENERATED) {
                 prompt = media.title || data.extra?.title || '';
                 negativePrompt = media.negative || data.extra?.negative || '';
-                console.log('[ComfyUI-Video] Using stored prompt for generated image:', prompt.slice(0, 80));
             } else {
                 try {
                     prompt = await getMultimodalCaption(imageBase64, 'Describe this image concisely for video generation prompt:');
@@ -550,7 +810,7 @@ jQuery(async function () {
             }
 
             const finalPrompt = settings.prompt || prompt || 'high quality, smooth motion, cinematic';
-            const finalNegative = settings.negativePrompt || negativePrompt || 'blurry, distorted, low quality, artifacts';
+            const finalNegative = (settings.negativePrompt || negativePrompt || 'blurry, distorted, low quality, artifacts').trim();
 
             const result = await generateVideo(imageBase64, finalPrompt, finalNegative, settings);
 

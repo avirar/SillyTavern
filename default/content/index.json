@@ -140,6 +140,14 @@
         "type": "workflow"
     },
     {
+        "filename": "Wan22_I2V_Default_Workflow.json",
+        "type": "video_workflow"
+    },
+    {
+        "filename": "Wan22_I2V_Remix_NSFW_Workflow.json",
+        "type": "video_workflow"
+    },
+    {
         "filename": "presets/kobold/Deterministic.json",
         "type": "kobold_preset"
     },

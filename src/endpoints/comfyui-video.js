@@ -1,13 +1,101 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import express from 'express';
 import fetch from 'node-fetch';
-import path from 'node:path';
+import sanitize from 'sanitize-filename';
+import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import urlJoin from 'url-join';
 import { delay, tryParse } from '../util.js';
+import { getFileNameValidationFunction } from '../middleware/validateFileName.js';
 import crypto from 'crypto';
 
 console.log('[COMFYUI-VIDEO-RELOAD] Module loaded');
 
+function getComfyVideoWorkflows(directories) {
+    return fs
+        .readdirSync(directories.comfyWorkflowsVideo)
+        .filter(file => file[0] !== '.' && file.toLowerCase().endsWith('.json'))
+        .sort(Intl.Collator().compare);
+}
+
 export const router = express.Router();
+
+router.post('/workflows', async (request, response) => {
+    try {
+        const data = getComfyVideoWorkflows(request.user.directories);
+        return response.send(data);
+    } catch (error) {
+        console.error(error);
+        return response.sendStatus(500);
+    }
+});
+
+router.post('/workflow', async (request, response) => {
+    try {
+        let filePath = path.join(request.user.directories.comfyWorkflowsVideo, sanitize(String(request.body.file_name)));
+        if (!fs.existsSync(filePath)) {
+            filePath = path.join(request.user.directories.comfyWorkflowsVideo, 'Wan22_I2V_Default_Workflow.json');
+        }
+        const data = fs.readFileSync(filePath, { encoding: 'utf-8' });
+        return response.send(JSON.stringify(data));
+    } catch (error) {
+        console.error(error);
+        return response.sendStatus(500);
+    }
+});
+
+router.post('/save-workflow', async (request, response) => {
+    try {
+        const filePath = path.join(request.user.directories.comfyWorkflowsVideo, sanitize(String(request.body.file_name)));
+        writeFileAtomicSync(filePath, request.body.workflow, 'utf8');
+        const data = getComfyVideoWorkflows(request.user.directories);
+        return response.send(data);
+    } catch (error) {
+        console.error(error);
+        return response.sendStatus(500);
+    }
+});
+
+router.post('/delete-workflow', async (request, response) => {
+    try {
+        const filePath = path.join(request.user.directories.comfyWorkflowsVideo, sanitize(String(request.body.file_name)));
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+        return response.sendStatus(200);
+    } catch (error) {
+        console.error(error);
+        return response.sendStatus(500);
+    }
+});
+
+router.post('/rename-workflow', getFileNameValidationFunction('old_name'), getFileNameValidationFunction('new_name'), async (request, response) => {
+    try {
+        const oldName = sanitize(String(request.body.old_name));
+        const newName = sanitize(String(request.body.new_name));
+
+        if (path.extname(oldName).toLowerCase() !== '.json' || path.extname(newName).toLowerCase() !== '.json') {
+            return response.status(400).send('Only JSON workflow files are allowed');
+        }
+
+        const oldPath = path.join(request.user.directories.comfyWorkflowsVideo, oldName);
+        const newPath = path.join(request.user.directories.comfyWorkflowsVideo, newName);
+
+        if (!fs.existsSync(oldPath)) {
+            return response.status(404).send('Workflow not found');
+        }
+
+        if (fs.existsSync(newPath)) {
+            return response.status(409).send('A workflow with that name already exists');
+        }
+
+        fs.renameSync(oldPath, newPath);
+        return response.sendStatus(204);
+    } catch (error) {
+        console.error('ComfyUI video workflow rename failed', error);
+        return response.sendStatus(500);
+    }
+});
 
 router.post('/loras', async (request, response) => {
     try {

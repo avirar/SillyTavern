@@ -1,0 +1,47 @@
+<div id="cv_comfy_workflow_editor_template">
+    <div class="cv_comfy_workflow_editor">
+        <h3><strong>ComfyUI Video Workflow Editor: <span id="cv_comfy_workflow_editor_name"></span></strong></h3>
+        <div class="cv_comfy_workflow_editor_content">
+            <div class="flex-container flexFlowColumn cv_comfy_workflow_editor_workflow_container">
+                <label for="cv_comfy_workflow_editor_workflow">Workflow (JSON)</label>
+                <textarea id="cv_comfy_workflow_editor_workflow" class="text_pole wide100p textarea_compact flex1" placeholder="Insert your ComfyUI workflow here by copying the JSON data obtained via the 'Save (API Format)' option. This option becomes available after enabling 'Dev Mode' in the settings. Remember to replace specific values within your workflow with placeholders as required for your use case."></textarea>
+            </div>
+            <div class="cv_comfy_workflow_editor_placeholder_container">
+                <div>Placeholders</div>
+                <ul class="cv_comfy_workflow_editor_placeholder_list">
+                    <li data-placeholder="image" class="cv_comfy_workflow_editor_not_found">"%image%" <small>(source image)</small></li>
+                    <li data-placeholder="prompt" class="cv_comfy_workflow_editor_not_found">"%prompt%"</li>
+                    <li data-placeholder="negative_prompt" class="cv_comfy_workflow_editor_not_found">"%negative_prompt%"</li>
+                    <li data-placeholder="seed" class="cv_comfy_workflow_editor_not_found">"%seed%"</li>
+                    <li data-placeholder="text_encoder" class="cv_comfy_workflow_editor_not_found">"%text_encoder%"</li>
+                    <li data-placeholder="vae" class="cv_comfy_workflow_editor_not_found">"%vae%"</li>
+                    <li data-placeholder="unet_high" class="cv_comfy_workflow_editor_not_found">"%unet_high%"</li>
+                    <li data-placeholder="unet_low" class="cv_comfy_workflow_editor_not_found">"%unet_low%"</li>
+                    <li data-placeholder="sampler_high" class="cv_comfy_workflow_editor_not_found">"%sampler_high%"</li>
+                    <li data-placeholder="sampler_low" class="cv_comfy_workflow_editor_not_found">"%sampler_low%"</li>
+                    <li data-placeholder="scheduler" class="cv_comfy_workflow_editor_not_found">"%scheduler%"</li>
+                    <li data-placeholder="sage_attn_mode" class="cv_comfy_workflow_editor_not_found">"%sage_attn_mode%"</li>
+                    <li data-placeholder="lora_high" class="cv_comfy_workflow_editor_not_found">"%lora_high%"</li>
+                    <li data-placeholder="lora_low" class="cv_comfy_workflow_editor_not_found">"%lora_low%"</li>
+                    <li data-placeholder="lora_weight" class="cv_comfy_workflow_editor_not_found">%lora_weight%</li>
+                    <li data-placeholder="width" class="cv_comfy_workflow_editor_not_found">%width%</li>
+                    <li data-placeholder="height" class="cv_comfy_workflow_editor_not_found">%height%</li>
+                    <li data-placeholder="length" class="cv_comfy_workflow_editor_not_found">%length%</li>
+                    <li data-placeholder="steps" class="cv_comfy_workflow_editor_not_found">%steps%</li>
+                    <li data-placeholder="split_step" class="cv_comfy_workflow_editor_not_found">%split_step%</li>
+                    <li data-placeholder="guidance" class="cv_comfy_workflow_editor_not_found">%guidance%</li>
+                    <li data-placeholder="shift" class="cv_comfy_workflow_editor_not_found">%shift%</li>
+                    <li data-placeholder="cfg_high" class="cv_comfy_workflow_editor_not_found">%cfg_high%</li>
+                    <li data-placeholder="cfg_low" class="cv_comfy_workflow_editor_not_found">%cfg_low%</li>
+                    <li data-placeholder="fps" class="cv_comfy_workflow_editor_not_found">%fps%</li>
+                </ul>
+                <div>Custom</div>
+                <div class="cv_comfy_workflow_editor_placeholder_actions">
+                    <span id="cv_comfy_workflow_editor_placeholder_add" title="Add custom placeholder">+</span>
+                </div>
+                <ul class="cv_comfy_workflow_editor_placeholder_list" id="cv_comfy_workflow_editor_placeholder_list_custom">
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
