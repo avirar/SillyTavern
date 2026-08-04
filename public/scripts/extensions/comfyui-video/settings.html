@@ -245,6 +245,20 @@
             <label for="cv_negative_prompt">Negative Prompt</label>
             <input id="cv_negative_prompt" type="text" class="text_pole" value="blurry, distorted, low quality, artifacts, watermark, static" />
         </div>
+        <div>
+            <label for="cv_prompt_mode">Video Prompt Source</label>
+            <small>Auto: conversation-based prompt for MiniMax H3 workflows, image prompt otherwise. Conversation: always ask the LLM. Image: never use the LLM prompt.</small>
+            <select id="cv_prompt_mode">
+                <option value="auto" selected>Auto (H3 uses conversation)</option>
+                <option value="conversation">Always conversation</option>
+                <option value="image">Always image</option>
+            </select>
+        </div>
+        <div>
+            <label for="cv_video_prompt_instruction">Conversation Prompt Instruction</label>
+            <small>Instruction given to the chat LLM to write the video prompt (uses {duration}). Leave empty for the default.</small>
+            <textarea id="cv_video_prompt_instruction" rows="5" placeholder="Leave empty to use the built-in default instruction."></textarea>
+        </div>
 
         <h4>Actions</h4>
         <div>

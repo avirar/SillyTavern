@@ -3,6 +3,7 @@ import {
     chat_metadata,
     eventSource,
     event_types,
+    generateQuietPrompt,
     getRequestHeaders,
     saveSettingsDebounced,
 } from '../../../script.js';
@@ -357,6 +358,12 @@ function migrateSettings() {
     if (s.sendImage === undefined) {
         s.sendImage = true;
     }
+    if (s.promptMode === undefined) {
+        s.promptMode = 'auto';
+    }
+    if (s.videoPromptInstruction === undefined) {
+        s.videoPromptInstruction = '';
+    }
 }
 
 /**
@@ -399,6 +406,50 @@ function stripFirstFrame(workflow) {
         }
     }
     return JSON.stringify(graph);
+}
+
+const DEFAULT_VIDEO_PROMPT_INSTRUCTION = `The conversation is producing a short cinematic VIDEO (with NATIVE synchronized audio) to accompany the current scene, which starts from the attached image.
+
+Using the recent conversation (weigh the LAST few messages most heavily), produce ONE video prompt with exactly these sections:
+Visual: one line of cinematic style (lighting, lens, palette, texture, mood).
+Scene overview: 2-3 sentences. The shot starts on the attached image; describe natural motion out of it. No shot-by-shot storyboard needed.
+Motion: 2-4 brief beats spread across roughly {duration} seconds.
+Audio: 2-4 lines. If the last message implies speech, write the actual DIALOGUE the characters say (verbatim phrases if present) and when; otherwise describe ambience, footsteps, and music hits at timestamps. Native synchronized audio is essential and must never be omitted.
+
+End with: No text, subtitles, logos or watermarks of any kind.
+Plain text, no markdown, about 140 to 180 words.`;
+
+/**
+ * Whether the conversation-prompt path should be used for the active workflow.
+ * @param {string} promptMode User-selected mode ('auto', 'conversation', 'image').
+ * @param {string} workflowFile Active workflow filename.
+ * @returns {boolean}
+ */
+function usesConversationPrompt(promptMode, workflowFile) {
+    if (promptMode === 'conversation') {
+        return true;
+    }
+    if (promptMode === 'image') {
+        return false;
+    }
+    return /^MiniMax_H3/i.test(workflowFile || '');
+}
+
+/**
+ * Generates an omni-modal video prompt from the conversation context, in the
+ * spirit of the /sd scene command, emphasizing the most recent messages so the
+ * model derives speech and sound for the latest moment.
+ * @param {string} instruction Raw instruction template (with {duration}).
+ * @param {number} duration Video duration in seconds.
+ * @returns {Promise<string>} The generated prompt text.
+ */
+async function generateVideoPromptFromChat(instruction, duration) {
+    const template = (instruction || DEFAULT_VIDEO_PROMPT_INSTRUCTION).replaceAll('{duration}', String(duration));
+    const reply = await generateQuietPrompt({ quietPrompt: template });
+    if (!reply || typeof reply !== 'string') {
+        throw new Error('No video prompt text generated.');
+    }
+    return reply.trim();
 }
 
 async function generateVideo(imageBase64, prompt, negativePrompt, settings) {
@@ -772,6 +823,16 @@ jQuery(async function () {
             saveSettingsDebounced();
         });
 
+        $('#cv_prompt_mode').val(settings.promptMode || 'auto').on('change', function () {
+            settings.promptMode = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $('#cv_video_prompt_instruction').val(settings.videoPromptInstruction || '').on('input', function () {
+            settings.videoPromptInstruction = $(this).val();
+            saveSettingsDebounced();
+        });
+
         const models = await loadModelsList();
         populateModelDropdowns(models);
     }
@@ -798,18 +859,30 @@ jQuery(async function () {
             let prompt = '';
             let negativePrompt = '';
 
-            if (media.source === MEDIA_SOURCE.GENERATED) {
-                prompt = media.title || data.extra?.title || '';
-                negativePrompt = media.negative || data.extra?.negative || '';
-            } else {
+            const useConversation = usesConversationPrompt(settings.promptMode, settings.workflow || DEFAULT_WORKFLOW);
+            if (useConversation) {
                 try {
-                    prompt = await getMultimodalCaption(imageBase64, 'Describe this image concisely for video generation prompt:');
+                    prompt = await generateVideoPromptFromChat(settings.videoPromptInstruction, settings.duration ?? 5);
                 } catch (e) {
-                    console.warn('[ComfyUI-Video] Caption failed, using default:', e);
+                    console.warn('[ComfyUI-Video] Conversation prompt failed, falling back to image prompt:', e);
                 }
             }
 
-            const finalPrompt = settings.prompt || prompt || 'high quality, smooth motion, cinematic';
+            if (!prompt) {
+                if (media.source === MEDIA_SOURCE.GENERATED) {
+                    prompt = media.title || data.extra?.title || '';
+                    negativePrompt = media.negative || data.extra?.negative || '';
+                } else {
+                    try {
+                        prompt = await getMultimodalCaption(imageBase64, 'Describe this image concisely for video generation prompt:');
+                    } catch (e) {
+                        console.warn('[ComfyUI-Video] Caption failed, using default:', e);
+                    }
+                }
+            }
+
+            const promptPrefix = (settings.promptPrefix || '').trim();
+            const finalPrompt = (promptPrefix ? promptPrefix + '\n' : '') + (settings.prompt || prompt || 'high quality, smooth motion, cinematic');
             const finalNegative = (settings.negativePrompt || negativePrompt || 'blurry, distorted, low quality, artifacts').trim();
 
             const result = await generateVideo(imageBase64, finalPrompt, finalNegative, settings);
