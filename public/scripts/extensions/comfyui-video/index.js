@@ -496,7 +496,6 @@ async function generateVideo(imageBase64, prompt, negativePrompt, settings) {
     const cfgHigh = settings.cfgHigh ?? 2.0;
     const cfgLow = settings.cfgLow ?? 1.0;
     const useSageAttn = settings.useSageAttn ?? true;
-    const sageAttnMode = settings.sageAttnMode ?? 'auto';
     const samplerHigh = settings.samplerHigh ?? 'euler_ancestral';
     const samplerLow = settings.samplerLow ?? 'euler_ancestral';
     const scheduler = settings.scheduler ?? 'normal';
@@ -519,7 +518,11 @@ async function generateVideo(imageBase64, prompt, negativePrompt, settings) {
     workflow = workflow.replaceAll('"%sampler_high%"', JSON.stringify(samplerHigh));
     workflow = workflow.replaceAll('"%sampler_low%"', JSON.stringify(samplerLow));
     workflow = workflow.replaceAll('"%scheduler%"', JSON.stringify(scheduler));
-    workflow = workflow.replaceAll('"%sage_attn_mode%"', JSON.stringify(sageAttnMode));
+        let resolvedSageMode = settings.sageAttnMode || 'auto';
+    if (settings.useSageAttn === false || resolvedSageMode === 'sdpa') {
+        resolvedSageMode = 'disabled';
+    }
+    workflow = workflow.replaceAll('"%sage_attn_mode%"', JSON.stringify(resolvedSageMode));
     workflow = workflow.replaceAll('"%lora_high%"', JSON.stringify(loraHigh));
     workflow = workflow.replaceAll('"%lora_low%"', JSON.stringify(loraLow));
     workflow = workflow.replaceAll('%seed%', JSON.stringify(seed));

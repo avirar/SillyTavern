@@ -236,12 +236,14 @@
         <div>
             <label for="cv_sage_attn_mode">SageAttention Backend</label>
             <select id="cv_sage_attn_mode">
+                <option value="disabled">disabled</option>
                 <option value="auto" selected>auto</option>
-                <option value="sdpa">sdpa</option>
                 <option value="sageattn_qk_int8_pv_fp16_cuda">sageattn_qk_int8_pv_fp16_cuda</option>
                 <option value="sageattn_qk_int8_pv_fp16_triton">sageattn_qk_int8_pv_fp16_triton</option>
                 <option value="sageattn_qk_int8_pv_fp8_cuda">sageattn_qk_int8_pv_fp8_cuda</option>
+                <option value="sageattn_qk_int8_pv_fp8_cuda++">sageattn_qk_int8_pv_fp8_cuda++</option>
                 <option value="sageattn3">sageattn3</option>
+                <option value="sageattn3_per_block_mean">sageattn3_per_block_mean</option>
             </select>
         </div>
 
