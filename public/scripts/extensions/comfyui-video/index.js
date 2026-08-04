@@ -413,11 +413,12 @@ const DEFAULT_VIDEO_PROMPT_INSTRUCTION = `The conversation is producing a short 
 Using the recent conversation (weigh the LAST few messages most heavily), produce ONE video prompt with exactly these sections:
 Visual: one line of cinematic style (lighting, lens, palette, texture, mood).
 Scene overview: 2-3 sentences. The shot starts on the attached image; describe natural motion out of it. No shot-by-shot storyboard needed.
-Motion: 2-4 brief beats spread across roughly {duration} seconds.
-Audio: 2-4 lines. If the last message implies speech, write the actual DIALOGUE the characters say (verbatim phrases if present) and when; otherwise describe ambience, footsteps, and music hits at timestamps. Native synchronized audio is essential and must never be omitted.
+Motion: 2-4 brief ACTING beats spread across the {duration} second clip (a breath, a glance, a hand tightening, an expression shift) that carry the emotional arc.
+Dialogue: If the last messages imply speech, quote each line EXACTLY in double quotes, attribute it to a speaker, and follow it with a parenthetical DELIVERY note stating tone, pace, volume and emotion - for example, She says: "I never wanted this." (quiet, trembling, voice breaking, slow). Derive BOTH the emotion and its INTENSITY from the characters' state in the most recent messages: scale from hushed/restrained for calm or intimate scenes up to urgent, raised or tearful for confrontation or distress. Keep each line short enough for the {duration} second clip, one speaker at a time.
+Audio: 2-4 lines of production sound - room tone, ambience, footsteps, music hits - each on its own line with a timestamp. Then restate every spoken line with when it lands (e.g. "her line lands at ~2s") and its delivery so the model paces the emotion.
 
 End with: No text, subtitles, logos or watermarks of any kind.
-Plain text, no markdown, about 140 to 180 words.`;
+Plain text, no markdown, about 180 to 220 words.`;
 
 /**
  * Whether the conversation-prompt path should be used for the active workflow.
